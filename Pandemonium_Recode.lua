@@ -239,7 +239,10 @@ local function applyWorldPreset(preset)
     notify("World preset: " .. preset)
 end
 
+-- Forward declarations used by callbacks defined before the UI elements.
 local worldPanel
+local watermark, crosshair, targetHud, playerPanel, playerName, playerHealth, characterBox
+
 local function openWorldPanel()
     if worldPanel then worldPanel:Destroy() end
     worldPanel = make("Frame", {
@@ -418,7 +421,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 -- Local-only status card; it never selects or tracks other players.
-local playerPanel = make("Frame", {
+playerPanel = make("Frame", {
     Size = UDim2.fromOffset(220, 65),
     Position = UDim2.new(1, -236, 0, 70),
     BackgroundColor3 = Theme.bg,
@@ -427,9 +430,9 @@ local playerPanel = make("Frame", {
 }, gui)
 round(playerPanel, 9)
 outline(playerPanel, Theme.line, 0.1)
-local playerName = label(playerPanel, "PLAYER: " .. player.Name, UDim2.new(1, -18, 0, 22),
+playerName = label(playerPanel, "PLAYER: " .. player.Name, UDim2.new(1, -18, 0, 22),
     UDim2.fromOffset(10, 5), 12, Theme.white, Enum.Font.GothamBold)
-local playerHealth = label(playerPanel, "Health: --", UDim2.new(1, -18, 0, 18),
+playerHealth = label(playerPanel, "Health: --", UDim2.new(1, -18, 0, 18),
     UDim2.fromOffset(10, 31), 10, Theme.muted)
 playerPanel.Visible = true
 
@@ -450,7 +453,7 @@ task.spawn(function()
     end
 end)
 
-local targetHud = make("Frame", {
+targetHud = make("Frame", {
     Name = "TargetHUDPreview",
     Size = UDim2.fromOffset(300, 92),
     Position = UDim2.new(0.5, -150, 0.62, 0),
@@ -530,12 +533,12 @@ task.spawn(function()
     end
 end)
 
-local crosshair = label(gui, "+", UDim2.fromOffset(22, 24),
+crosshair = label(gui, "+", UDim2.fromOffset(22, 24),
     UDim2.new(0.5, -11, 0.5, -12), 22, Theme.white, Enum.Font.GothamBold)
 crosshair.Visible = false
 
 -- Local character box preview (does not draw boxes around other players).
-local characterBox = make("SelectionBox", {
+characterBox = make("SelectionBox", {
     Name = "LocalCharacterBox",
     LineThickness = 0.045,
     Color3 = Theme.accent,
@@ -550,7 +553,7 @@ if player.Character then bindLocalCharacter(player.Character) end
 player.CharacterAdded:Connect(bindLocalCharacter)
 
 -- Top watermark inspired by the reference: compact dark status strip.
-local watermark = make("Frame", {
+watermark = make("Frame", {
     Name = "PandemoniumWatermark",
     Size = UDim2.fromOffset(330, 30),
     Position = UDim2.new(0, 18, 0, 18),
