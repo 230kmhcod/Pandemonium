@@ -60,7 +60,199 @@ local state = {
     particleRate = 12,
 }
 
+
 local running = true
+
+-- Core helpers and base window restored for the original feature set.
+local connections = {}
+local activeHighlights = {}
+local frameCount, currentFps, lastFrame = 0, 0, os.clock()
+
+local function connect(signal, callback)
+    local connection = signal:Connect(callback)
+    table.insert(connections, connection)
+    return connection
+end
+
+local function make(className, properties, parent)
+    local object = Instance.new(className)
+    for key, value in pairs(properties or {}) do
+        object[key] = value
+    end
+    object.Parent = parent
+    return object
+end
+
+local function addCorner(object, radius)
+    return make("UICorner", {CornerRadius = UDim.new(0, radius or 8)}, object)
+end
+
+local function addStroke(object, color, transparency, thickness)
+    return make("UIStroke", {
+        Color = color or THEME.purple,
+        Transparency = transparency or 0.25,
+        Thickness = thickness or 1,
+    }, object)
+end
+
+local function animate(object, properties, duration)
+    local ok, animation = pcall(function()
+        return TweenService:Create(
+            object,
+            TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            properties
+        )
+    end)
+    if ok and animation then animation:Play() end
+    return animation
+end
+
+local gui = make("ScreenGui", {
+    Name = "PulseVisuals",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, guiParent)
+
+local main = make("Frame", {
+    Name = "Main",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(680, 455),
+    BackgroundColor3 = THEME.bg,
+    BorderSizePixel = 0,
+    ClipsDescendants = false,
+}, gui)
+addCorner(main, 12)
+addStroke(main, THEME.purple, 0.18, 1.2)
+
+local mainScale = make("UIScale", {Scale = 1}, main)
+local header = make("Frame", {
+    Name = "Header",
+    Size = UDim2.new(1, 0, 0, 58),
+    BackgroundColor3 = THEME.panel,
+    BorderSizePixel = 0,
+}, main)
+addCorner(header, 12)
+make("Frame", {
+    Position = UDim2.new(0, 0, 1, -12),
+    Size = UDim2.new(1, 0, 0, 12),
+    BackgroundColor3 = THEME.panel,
+    BorderSizePixel = 0,
+}, header)
+
+make("TextLabel", {
+    Position = UDim2.fromOffset(18, 7),
+    Size = UDim2.new(1, -90, 0, 27),
+    BackgroundTransparency = 1,
+    Text = "PULSE VISUALS",
+    TextColor3 = THEME.text,
+    Font = Enum.Font.GothamBold,
+    TextSize = 18,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, header)
+make("TextLabel", {
+    Position = UDim2.fromOffset(19, 33),
+    Size = UDim2.new(1, -90, 0, 15),
+    BackgroundTransparency = 1,
+    Text = "BLOCKLIFE PROFILE  •  VISUAL CLIENT",
+    TextColor3 = THEME.muted,
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, header)
+
+local closeButton = make("TextButton", {
+    Name = "Close",
+    Position = UDim2.new(1, -44, 0, 13),
+    Size = UDim2.fromOffset(30, 30),
+    BackgroundColor3 = THEME.panel2,
+    BorderSizePixel = 0,
+    Text = "×",
+    TextColor3 = THEME.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 22,
+    AutoButtonColor = false,
+}, header)
+addCorner(closeButton, 7)
+
+local sidebar = make("Frame", {
+    Name = "Sidebar",
+    Position = UDim2.fromOffset(12, 70),
+    Size = UDim2.new(0, 138, 1, -82),
+    BackgroundColor3 = THEME.panel,
+    BorderSizePixel = 0,
+}, main)
+addCorner(sidebar, 9)
+make("UIPadding", {
+    PaddingTop = UDim.new(0, 8),
+    PaddingLeft = UDim.new(0, 8),
+    PaddingRight = UDim.new(0, 8),
+}, sidebar)
+make("UIListLayout", {
+    Padding = UDim.new(0, 7),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, sidebar)
+
+local pageTitle = make("TextLabel", {
+    Position = UDim2.fromOffset(164, 70),
+    Size = UDim2.new(1, -176, 0, 28),
+    BackgroundTransparency = 1,
+    Text = "Visuals",
+    TextColor3 = THEME.purple,
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, main)
+
+local searchBox = make("TextBox", {
+    Name = "Search",
+    Position = UDim2.fromOffset(164, 101),
+    Size = UDim2.new(1, -176, 0, 30),
+    BackgroundColor3 = THEME.panel,
+    BorderSizePixel = 0,
+    PlaceholderText = "Search modules...",
+    PlaceholderColor3 = THEME.muted,
+    Text = "",
+    TextColor3 = THEME.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 11,
+    ClearTextOnFocus = false,
+}, main)
+addCorner(searchBox, 7)
+make("UIPadding", {
+    PaddingLeft = UDim.new(0, 10),
+    PaddingRight = UDim.new(0, 8),
+}, searchBox)
+
+local list = make("ScrollingFrame", {
+    Name = "ModuleList",
+    Position = UDim2.fromOffset(164, 139),
+    Size = UDim2.new(1, -176, 1, -151),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 4,
+    ScrollBarImageColor3 = THEME.purple,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+}, main)
+make("UIListLayout", {
+    Padding = UDim.new(0, 7),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+}, list)
+
+local toastHolder = make("Frame", {
+    Name = "ToastHolder",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -18, 0, 18),
+    Size = UDim2.fromOffset(270, 220),
+    BackgroundTransparency = 1,
+}, gui)
+make("UIListLayout", {
+    Padding = UDim.new(0, 8),
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    VerticalAlignment = Enum.VerticalAlignment.Top,
+}, toastHolder)
 
 -- Optional local persistence. Uses executor file APIs only when available; otherwise session-only.
 local CONFIG_PATH = "PulseVisuals_config.json"
@@ -1294,7 +1486,7 @@ local function cleanup()
         pcall(function() connection:Disconnect() end)
     end
 end
-if script then connect(script.Destroying, cleanup) end
+pcall(function() connect(gui.Destroying, cleanup) end)
 
 renderPage("Visuals")
 -- Restore enabled modules after their UI/effect objects exist.
