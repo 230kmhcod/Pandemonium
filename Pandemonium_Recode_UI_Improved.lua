@@ -10,9 +10,6 @@ local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
-if not player then
-    error("Pandemonium Recode must run as a LocalScript (client-side).")
-end
 local playerGui = player:WaitForChild("PlayerGui")
 
 local oldGui = playerGui:FindFirstChild("PandemoniumRecode")
@@ -72,45 +69,30 @@ local function label(parent, text, size, pos, fontSize, color, font)
 end
 
 local function draggable(frame, handle)
-    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
-    local changedConn
-
+    local dragging, dragInput, dragStart, startPos
     handle.InputBegan:Connect(function(input)
-        local kind = input.UserInputType
-        if kind ~= Enum.UserInputType.MouseButton1 and kind ~= Enum.UserInputType.Touch then
-            return
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
         end
-        dragging = true
-        dragStart = input.Position
-        startPos = frame.Position
-        if changedConn then changedConn:Disconnect() end
-        changedConn = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                if changedConn then changedConn:Disconnect(); changedConn = nil end
-            end
-        end)
     end)
-
     handle.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end)
-
-    -- One global listener per draggable frame (rather than one per drag).
-    local moveConn = UserInputService.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input ~= dragInput and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-        local delta = input.Position - dragStart
-        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end)
-    frame.Destroying:Connect(function()
-        dragging = false
-        if changedConn then changedConn:Disconnect() end
-        moveConn:Disconnect()
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input == dragInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
     end)
 end
 
@@ -143,26 +125,6 @@ main.ZIndex = 2
 
 local openPosition = UDim2.new(0.5, -460, 0.54, -245)
 local closedPosition = UDim2.new(0.5, -460, 0.54, -225)
-
--- Scale the fixed desktop layout down on narrow/short screens.
-local uiScale = Instance.new("UIScale")
-uiScale.Name = "ResponsiveScale"
-uiScale.Parent = main
-local camera = workspace.CurrentCamera
-local function updateUiScale()
-    camera = workspace.CurrentCamera
-    if not camera then return end
-    local viewport = camera.ViewportSize
-    uiScale.Scale = math.clamp(math.min(viewport.X / 950, viewport.Y / 540), 0.55, 1)
-end
-updateUiScale()
-local viewportConn
-if camera then
-    viewportConn = camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateUiScale)
-end
-gui.Destroying:Connect(function()
-    if viewportConn then viewportConn:Disconnect() end
-end)
 local menuTween
 local dimTween
 
@@ -531,7 +493,7 @@ playerPanel = make("Frame", {
 }, gui)
 round(playerPanel, 9)
 outline(playerPanel, Theme.line, 0.1)
-playerName = label(playerPanel, "PLAYER: " .. player.Name, UDim2.new(1, -18, 0, 22),
+playerName = label(playerPanel, "HUD PREVIEW: " .. player.Name, UDim2.new(1, -18, 0, 22),
     UDim2.fromOffset(10, 5), 12, Theme.white, Enum.Font.GothamBold)
 playerHealth = label(playerPanel, "Health: --", UDim2.new(1, -18, 0, 18),
     UDim2.fromOffset(10, 31), 10, Theme.muted)
@@ -594,7 +556,7 @@ bracket(UDim2.new(0, 0, 1, -15), UDim2.fromOffset(3, 15))
 bracket(UDim2.new(1, -15, 1, -3), UDim2.fromOffset(15, 3))
 bracket(UDim2.new(1, -3, 1, -15), UDim2.fromOffset(3, 15))
 
-local targetName = label(targetHud, "PLAYER: " .. player.Name,
+local targetName = label(targetHud, "HUD PREVIEW: " .. player.Name,
     UDim2.new(1, -90, 0, 24), UDim2.fromOffset(80, 12), 15, Theme.white, Enum.Font.GothamBold)
 local targetHealthText = label(targetHud, "HP: -- / --",
     UDim2.new(1, -90, 0, 18), UDim2.fromOffset(80, 39), 11, Theme.muted)
@@ -612,17 +574,19 @@ local targetHealthFill = make("Frame", {
 }, targetHealthBack)
 round(targetHealthFill, 5)
 
+-- Local HUD preview only: a third-party game does not expose a universal hit-confirmation event.
+-- This preview is not a cross-game player tracker or confirmed-hit detector.
 local function updateTargetHud()
     local character = player.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if humanoid then
         local hp = math.max(0, humanoid.Health)
         local maxHp = math.max(1, humanoid.MaxHealth)
-        targetName.Text = "PLAYER: " .. player.Name
+        targetName.Text = "HUD PREVIEW: " .. player.Name
         targetHealthText.Text = string.format("HP: %d / %d", math.floor(hp), math.floor(maxHp))
         targetHealthFill.Size = UDim2.new(math.clamp(hp / maxHp, 0, 1), 0, 1, 0)
     else
-        targetName.Text = "PLAYER: " .. player.Name
+        targetName.Text = "HUD PREVIEW: " .. player.Name
         targetHealthText.Text = "HP: waiting for character..."
         targetHealthFill.Size = UDim2.new(0, 0, 1, 0)
     end
@@ -657,7 +621,7 @@ player.CharacterAdded:Connect(bindLocalCharacter)
 watermark = make("Frame", {
     Name = "PandemoniumWatermark",
     Size = UDim2.fromOffset(330, 30),
-    Position = UDim2.new(0, 18, 0, 18),
+    Position = UDim2.new(0, 18, 0, 82),
     BackgroundColor3 = Color3.fromRGB(15, 16, 20),
     BackgroundTransparency = 0.08,
     BorderSizePixel = 0,
@@ -665,7 +629,7 @@ watermark = make("Frame", {
 round(watermark, 7)
 outline(watermark, Theme.line, 0.45)
 
-local watermarkTitle = label(watermark, "♜  pandemonium", UDim2.fromOffset(112, 30),
+local watermarkTitle = label(watermark, "[*] pandemonium", UDim2.fromOffset(112, 30),
     UDim2.fromOffset(9, 0), 11, Theme.white, Enum.Font.GothamBold)
 watermarkTitle.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -676,7 +640,7 @@ make("Frame", {
     BorderSizePixel = 0,
 }, watermark)
 
-local adminTag = label(watermark, "◆ Recode", UDim2.fromOffset(61, 30),
+local adminTag = label(watermark, "[+] Recode", UDim2.fromOffset(61, 30),
     UDim2.fromOffset(134, 0), 10, Color3.fromRGB(220, 220, 228), Enum.Font.GothamSemibold)
 
 make("Frame", {
@@ -686,7 +650,7 @@ make("Frame", {
     BorderSizePixel = 0,
 }, watermark)
 
-local fpsLabel = label(watermark, "▣ UI", UDim2.fromOffset(42, 30),
+local fpsLabel = label(watermark, "[UI]", UDim2.fromOffset(42, 30),
     UDim2.fromOffset(207, 0), 10, Theme.white, Enum.Font.GothamSemibold)
 
 make("Frame", {
@@ -696,7 +660,7 @@ make("Frame", {
     BorderSizePixel = 0,
 }, watermark)
 
-local pingLabel = label(watermark, "◈ Ready", UDim2.fromOffset(67, 30),
+local pingLabel = label(watermark, "[OK] Ready", UDim2.fromOffset(67, 30),
     UDim2.fromOffset(260, 0), 10, Theme.white, Enum.Font.GothamSemibold)
 
 -- Keybind and initial state
